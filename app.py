@@ -15,9 +15,11 @@ def load_classifier():
     global classifier
     if classifier is None:
         print("Loading emotion classifier...")
-        from speechbrain.inference.classifiers import EncoderClassifier
-        classifier = EncoderClassifier.from_hparams(
+        from speechbrain.pretrained.interfaces import foreign_class
+        classifier = foreign_class(
             source="speechbrain/emotion-recognition-wav2vec2-IEMOCAP",
+            pymodule_file="custom_interface.py",
+            classname="CustomEncoderWav2vec2Classifier",
             savedir="tmpdir_emotion"
         )
         print("Classifier loaded!")

@@ -20,7 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY app.py .
 COPY static ./static
-
+COPY custom_interface.py .
 # Pre-download the SpeechBrain model during build to speed up startup
 RUN python -c "from speechbrain.pretrained.interfaces import foreign_class; \
     classifier = foreign_class(source='speechbrain/emotion-recognition-wav2vec2-IEMOCAP', \

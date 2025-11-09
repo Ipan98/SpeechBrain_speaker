@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     curl \
+    ffmpeg \ 
     libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 

@@ -24,6 +24,8 @@ def load_classifier():
     return classifier
 import torchaudio
 import torch
+from pydub import AudioSegment
+import io
 def emotion_recognition(file_path):
     """Classify emotion from audio file."""
     try:
@@ -69,30 +71,32 @@ def health():
 def classify_audio():
     if 'audio' not in request.files:
         return jsonify({"error": "No audio file provided"}), 400
-    
+
     audio_file = request.files['audio']
-    
     if audio_file.filename == '':
         return jsonify({"error": "No file selected"}), 400
-    
+
     # Save uploaded file temporarily
-    with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
-        temp_path = temp_file.name
+    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+        temp_path = tmp_file.name
         audio_file.save(temp_path)
-    
+
     try:
+        # ✅ Convert to standard 16 kHz mono WAV if format unsupported
+        try:
+            AudioSegment.from_file(temp_path).set_frame_rate(16000).set_channels(1).export(
+                temp_path, format="wav"
+            )
+        except Exception as conv_err:
+            raise Exception(f"Conversion failed: {conv_err}")
+
         emotion, confidence = emotion_recognition(temp_path)
-        return jsonify({
-            "emotion": emotion,
-            "confidence": confidence
-        }), 200
+        return jsonify({"emotion": emotion, "confidence": confidence}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Error processing audio: {str(e)}"}), 500
     finally:
-        # Clean up
         if os.path.exists(temp_path):
             os.unlink(temp_path)
-
 if __name__ == '__main__':
     # Railway sets PORT environment variable
     port = int(os.environ.get('PORT', 5000))

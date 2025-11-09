@@ -1,9 +1,10 @@
 flask==3.0.0
 flask-cors==4.0.0
-speechbrain==0.5.16
-torch==2.1.0
-torchaudio==2.1.0
-transformers>=4.35.0
+speechbrain==1.0.0
+torch>=2.0.0
+torchaudio>=2.0.0
+transformers>=4.30.0
 sentencepiece>=0.1.99
-huggingface-hub>=0.16.4,<1.0
+huggingface-hub>=0.16.4
+numpy<2.0.0
 gunicorn==21.2.0

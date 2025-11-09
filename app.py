@@ -5,7 +5,6 @@ import numpy as np
 import torch
 import torchaudio
 import streamlit as st
-import sounddevice as sd
 from speechbrain.pretrained.interfaces import foreign_class
 
 # -----------------------------------------------------------
@@ -23,9 +22,8 @@ except Exception as e:
 st.set_page_config(page_title="🎧 Emotion Detection", layout="centered")
 st.title("🎙️ Speech Emotion Detection with SpeechBrain")
 st.markdown("""
-Upload or record a voice sample — the model will detect the **emotion** expressed in speech.  
-This app uses [`speechbrain/emotion-recognition-wav2vec2-IEMOCAP`](https://huggingface.co/speechbrain/emotion-recognition-wav2vec2-IEMOCAP)
-with your custom `custom_interface.py`.
+Upload a voice sample to detect the **emotion** expressed in speech.  
+Model: [`speechbrain/emotion-recognition-wav2vec2-IEMOCAP`](https://huggingface.co/speechbrain/emotion-recognition-wav2vec2-IEMOCAP)
 """)
 
 # -----------------------------------------------------------
@@ -65,31 +63,30 @@ def emotion_recognition(file_name):
             return text_lab[0]
 
 # -----------------------------------------------------------
-# Upload or record audio
+# Upload section
 # -----------------------------------------------------------
-st.subheader("🎧 Upload or Record Audio")
+st.subheader("🎧 Upload an Audio File (WAV/MP3/OGG)")
+audio_file = st.file_uploader("Choose an audio file", type=["wav", "mp3", "ogg"])
 
-col1, col2 = st.columns(2)
-audio_file = None
-
-# Upload
-with col1:
-    uploaded = st.file_uploader("Upload an audio file (WAV/MP3/OGG)", type=["wav", "mp3", "ogg"])
-    if uploaded:
-        audio_file = uploaded
-
-# Record
-with col2:
-    duration = st.slider("Record duration (seconds):", 3, 10, 5)
-    if st.button("🎤 Record"):
-        st.info("Recording... please speak clearly 🎙️")
-        fs = 16000
-        audio = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype='float32')
-        sd.wait()
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-            torchaudio.save(tmp.name, torch.tensor(audio.T), fs)
-            audio_file = open(tmp.name, "rb")
-        st.success("Recording finished!")
+# -----------------------------------------------------------
+# (Optional) Microphone recording — local only
+# -----------------------------------------------------------
+if os.environ.get("STREAMLIT_RUNTIME_ENV") != "cloud":
+    try:
+        import sounddevice as sd
+        st.markdown("### 🎤 Record Your Voice (local use only)")
+        duration = st.slider("Duration (seconds):", 3, 10, 5)
+        if st.button("Record"):
+            st.info("Recording... 🎙️")
+            fs = 16000
+            audio = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype='float32')
+            sd.wait()
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+                torchaudio.save(tmp.name, torch.tensor(audio.T), fs)
+                audio_file = open(tmp.name, "rb")
+            st.success("Recording finished!")
+    except Exception as e:
+        st.warning(f"Microphone not available: {e}")
 
 # -----------------------------------------------------------
 # Run inference

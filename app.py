@@ -3,23 +3,30 @@ from flask_cors import CORS
 import wave
 import os
 import tempfile
-from speechbrain.pretrained.interfaces import foreign_class
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 CORS(app)
 
-# Initialize the classifier
-print("Loading emotion classifier...")
-classifier = foreign_class(
-    source="speechbrain/emotion-recognition-wav2vec2-IEMOCAP",
-    pymodule_file="custom_interface.py",
-    classname="CustomEncoderWav2vec2Classifier"
-)
-print("Classifier loaded!")
+# Global classifier variable
+classifier = None
+
+def load_classifier():
+    """Lazy load the classifier on first use"""
+    global classifier
+    if classifier is None:
+        print("Loading emotion classifier...")
+        from speechbrain.inference.classifiers import EncoderClassifier
+        classifier = EncoderClassifier.from_hparams(
+            source="speechbrain/emotion-recognition-wav2vec2-IEMOCAP",
+            savedir="tmpdir_emotion"
+        )
+        print("Classifier loaded!")
+    return classifier
 
 def emotion_recognition(file_path):
     """Classify emotion from audio file"""
     try:
+        clf = load_classifier()
         with wave.open(file_path, 'rb') as wav_file:
             frame_rate = wav_file.getframerate()
             channels = wav_file.getnchannels()
@@ -38,7 +45,7 @@ def emotion_recognition(file_path):
                     segment = wav_file.readframes(min(segment_length, frame_count))
                     new_wav_file.writeframes(segment)
 
-                out_prob, score, index, text_lab = classifier.classify_file(temp_file_name)
+                out_prob, score, index, text_lab = clf.classify_file(temp_file_name)
                 
                 # Clean up temp file
                 os.unlink(temp_file_name)
@@ -61,7 +68,7 @@ def serve_static(path):
 
 @app.route('/api/health', methods=['GET'])
 def health():
-    return jsonify({"status": "healthy"}), 200
+    return jsonify({"status": "healthy", "model_loaded": classifier is not None}), 200
 
 @app.route('/api/classify', methods=['POST'])
 def classify_audio():
@@ -93,5 +100,5 @@ def classify_audio():
 
 if __name__ == '__main__':
     # Railway sets PORT environment variable
-    port = 8082
+    port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)

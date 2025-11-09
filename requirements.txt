@@ -7,4 +7,5 @@ transformers>=4.30.0
 sentencepiece>=0.1.99
 huggingface-hub>=0.16.4
 numpy<2.0.0
+soundfile>=0.12.1
 gunicorn==21.2.0

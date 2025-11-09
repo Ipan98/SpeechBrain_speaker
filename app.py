@@ -22,35 +22,30 @@ def load_classifier():
         )
         print("Classifier loaded!")
     return classifier
-
+import torchaudio
+import torch
 def emotion_recognition(file_path):
-    """Classify emotion from audio file"""
+    """Classify emotion from audio file."""
     try:
         clf = load_classifier()
-        with wave.open(file_path, 'rb') as wav_file:
-            frame_rate = wav_file.getframerate()
-            channels = wav_file.getnchannels()
-            sample_width = wav_file.getsampwidth()
-            frame_count = wav_file.getnframes()
-            segment_length = 10 * frame_rate
 
-            # Process first segment (or entire file if shorter)
-            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
-                temp_file_name = temp_file.name
-                
-                with wave.open(temp_file_name, 'wb') as new_wav_file:
-                    new_wav_file.setframerate(frame_rate)
-                    new_wav_file.setnchannels(channels)
-                    new_wav_file.setsampwidth(sample_width)
-                    segment = wav_file.readframes(min(segment_length, frame_count))
-                    new_wav_file.writeframes(segment)
+        # Load any supported audio (wav, mp3, ogg, etc.)
+        signal, fs = torchaudio.load(file_path)
 
-                out_prob, score, index, text_lab = clf.classify_file(temp_file_name)
-                
-                # Clean up temp file
-                os.unlink(temp_file_name)
-                
-                return text_lab[0], float(score[0])
+        # Convert to mono if needed
+        if signal.shape[0] > 1:
+            signal = torch.mean(signal, dim=0, keepdim=True)
+
+        # Resample to 16 kHz if required by model
+        if fs != 16000:
+            resampler = torchaudio.transforms.Resample(orig_freq=fs, new_freq=16000)
+            signal = resampler(signal)
+            fs = 16000
+
+        # Classify directly from tensor (no need for wave.open)
+        out_prob, score, index, text_lab = clf.classify_batch(signal)
+        return text_lab[0], float(score[0])
+
     except Exception as e:
         raise Exception(f"Error processing audio: {str(e)}")
 

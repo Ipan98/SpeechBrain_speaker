@@ -1,7 +1,7 @@
 import io
 import os
 import tempfile
-from typing import Dict
+from typing import Dict, Optional
 
 import torch
 import torchaudio
@@ -15,11 +15,20 @@ MODEL_SAVE_DIR = os.path.join(
     os.path.dirname(__file__), "pretrained_models", "emotion-recognition-wav2vec2-IEMOCAP"
 )
 
-def load_model() -> EncoderClassifier:
-    """Loads the SpeechBrain emotion recognition model."""
-    return EncoderClassifier.from_hparams(source=MODEL_SOURCE, savedir=MODEL_SAVE_DIR)
+# Global variable to hold the classifier (loaded on first request)
+_classifier: Optional[EncoderClassifier] = None
 
-classifier = load_model()
+def get_classifier() -> EncoderClassifier:
+    """Loads the SpeechBrain emotion recognition model (lazy loading)."""
+    global _classifier
+    if _classifier is None:
+        app.logger.info("Loading emotion recognition model...")
+        _classifier = EncoderClassifier.from_hparams(
+            source=MODEL_SOURCE, 
+            savedir=MODEL_SAVE_DIR
+        )
+        app.logger.info("Model loaded successfully")
+    return _classifier
 
 EMOTION_LABELS: Dict[int, str] = {
     0: "neutral",
@@ -49,6 +58,7 @@ def prepare_audio(file_like: io.BytesIO) -> torch.Tensor:
 
 def detect_emotion(audio_tensor: torch.Tensor) -> Dict[str, float]:
     """Runs inference on the provided audio tensor and returns label probabilities."""
+    classifier = get_classifier()
     with torch.no_grad():
         out_prob, _, _, _ = classifier.classify_batch(audio_tensor)
 
@@ -64,6 +74,11 @@ def detect_emotion(audio_tensor: torch.Tensor) -> Dict[str, float]:
 @app.route("/")
 def index():
     return render_template("index.html")
+
+@app.route("/health")
+def health():
+    """Health check endpoint that responds immediately without loading the model."""
+    return jsonify({"status": "healthy"}), 200
 
 @app.route("/predict", methods=["POST"])
 def predict():

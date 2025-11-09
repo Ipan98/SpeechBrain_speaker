@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Speech Emotion Detector</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Speech Emotion Detector</h1>
+      <p>
+        Click <strong>Start</strong>, speak into your microphone, then press
+        <strong>Stop</strong> to analyse your emotion.
+      </p>
+      <div class="controls">
+        <button id="start-btn">Start</button>
+        <button id="stop-btn" disabled>Stop</button>
+      </div>
+      <section class="status">
+        <h2>Status</h2>
+        <p id="status-text">Idle</p>
+      </section>
+      <section class="results" aria-live="polite">
+        <h2>Detected Emotion</h2>
+        <p id="emotion">No prediction yet</p>
+        <table id="probabilities" class="hidden">
+          <thead>
+            <tr>
+              <th>Emotion</th>
+              <th>Confidence</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </main>
+    <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+  </body>
+</html>

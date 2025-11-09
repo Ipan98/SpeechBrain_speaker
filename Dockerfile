@@ -20,8 +20,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py .
 COPY static ./static
 
+# Pre-download the SpeechBrain model during build to speed up startup
+RUN python -c "from speechbrain.pretrained.interfaces import foreign_class; \
+    classifier = foreign_class(source='speechbrain/emotion-recognition-wav2vec2-IEMOCAP', \
+    pymodule_file='custom_interface.py', classname='CustomEncoderWav2vec2Classifier')" || true
+
 # Expose port
 EXPOSE 5000
 
 # Run the application with gunicorn for production
-CMD gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120 app:app
+CMD gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 300 --preload app:app

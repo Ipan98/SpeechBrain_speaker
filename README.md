@@ -1,198 +1,335 @@
-# Emotion Recognition Web App - Railway Deployment Guide
+# Emotion Recognition Web App - Railway Deployment
 
-## 📁 Project Structure
+A full-stack application for recording audio and classifying emotions using SpeechBrain's emotion recognition model.
+
+## Project Structure
 
 ```
-emotion-recognition-app/
-├── app.py                 # Main Flask application
-├── templates/
-│   └── index.html        # Frontend interface
-├── uploads/              # Temporary audio storage (created automatically)
-├── requirements.txt      # Python dependencies
-├── Procfile             # Railway process configuration
-├── railway.json         # Railway deployment config
-└── README.md            # Project documentation
+emotion-recognition/
+├── backend/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── app.py
+│   └── railway.json
+├── frontend/
+│   ├── Dockerfile
+│   ├── nginx.conf
+│   ├── package.json
+│   ├── public/
+│   │   └── index.html
+│   └── src/
+│       ├── App.js
+│       └── index.js
+└── README.md
 ```
 
-## 🚀 Deployment Steps
+## Setup Instructions
 
-### 1. Prepare Your Project
+### 1. Create the project structure
 
-1. Create a new directory for your project:
 ```bash
-mkdir emotion-recognition-app
-cd emotion-recognition-app
+mkdir -p emotion-recognition/backend emotion-recognition/frontend/src emotion-recognition/frontend/public
+cd emotion-recognition
 ```
 
-2. Create the required files:
-   - `app.py` - Main Flask application
-   - `requirements.txt` - Dependencies
-   - `Procfile` - Process configuration
-   - `railway.json` - Railway configuration
+### 2. Create Backend Files
 
-3. Create a `templates` folder and add `index.html`:
-```bash
-mkdir templates
+Place the following files in `backend/`:
+- `app.py` (Flask backend)
+- `Dockerfile` (Backend Docker config)
+- `requirements.txt` (Python dependencies)
+- `railway.json` (Railway configuration)
+
+### 3. Create Frontend Files
+
+**frontend/public/index.html:**
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="description" content="Emotion Recognition App" />
+  <title>Emotion Recognition</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+  <noscript>You need to enable JavaScript to run this app.</noscript>
+  <div id="root"></div>
+</body>
+</html>
 ```
 
-### 2. Initialize Git Repository
+**frontend/src/index.js:**
+```javascript
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
 
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+```
+
+**frontend/src/App.js:**
+- Use the React component code provided
+
+Place additional files in `frontend/`:
+- `Dockerfile`
+- `nginx.conf`
+- `package.json`
+- `railway.json`
+
+## Deployment on Railway
+
+### Method 1: Deploy from GitHub (Recommended)
+
+1. **Push your code to GitHub:**
 ```bash
 git init
 git add .
-git commit -m "Initial commit: Emotion recognition app"
+git commit -m "Initial commit"
+git branch -M main
+git remote add origin YOUR_GITHUB_REPO_URL
+git push -u origin main
 ```
 
-### 3. Deploy to Railway
+2. **Deploy on Railway:**
+   - Go to [railway.app](https://railway.app)
+   - Click "New Project"
+   - Select "Deploy from GitHub repo"
+   - Choose your repository
+   - Railway will detect both services automatically
 
-#### Option A: Using Railway CLI
+3. **Configure Services:**
+   
+   **Backend Service:**
+   - Railway will auto-detect the Dockerfile in `backend/`
+   - Add environment variable:
+     - `PORT`: 5000 (Railway sets this automatically)
+   - Note the generated URL (e.g., `https://your-backend.railway.app`)
 
-1. Install Railway CLI:
+   **Frontend Service:**
+   - Railway will auto-detect the Dockerfile in `frontend/`
+   - Add environment variable:
+     - `REACT_APP_API_URL`: Your backend URL from above
+   - Railway will generate a public URL
+
+4. **Update Frontend Environment:**
+   - In Railway dashboard, go to Frontend service
+   - Add variable: `REACT_APP_API_URL=https://your-backend.railway.app`
+   - Redeploy if needed
+
+### Method 2: Deploy with Railway CLI
+
+1. **Install Railway CLI:**
 ```bash
 npm install -g @railway/cli
 ```
 
-2. Login to Railway:
+2. **Login:**
 ```bash
 railway login
 ```
 
-3. Initialize and deploy:
+3. **Deploy Backend:**
 ```bash
+cd backend
 railway init
 railway up
 ```
 
-#### Option B: Using Railway Dashboard
-
-1. Go to [railway.app](https://railway.app)
-2. Click "New Project" → "Deploy from GitHub repo"
-3. Connect your GitHub account and select your repository
-4. Railway will automatically detect the configuration and deploy
-
-### 4. Configure Environment (if needed)
-
-Railway will automatically set the `PORT` environment variable. No additional configuration needed for basic deployment.
-
-## 🔧 Important Configuration Details
-
-### Memory Requirements
-- The SpeechBrain model requires significant memory (~2GB)
-- Recommended Railway plan: **Pro** (for adequate resources)
-- The app uses 2 workers with 120s timeout for handling large audio files
-
-### Audio File Limits
-- Max upload size: 16MB
-- Supported formats: WAV, MP3, M4A, OGG, FLAC
-- Files are automatically converted to 16kHz mono WAV
-
-### Model Loading
-- The emotion recognition model loads at startup (~30-60 seconds)
-- First request may be slower as the model initializes
-- Subsequent requests are faster
-
-## 🧪 Testing Your Deployment
-
-Once deployed, test your app:
-
-1. **Health Check**:
-   - Visit `https://your-app.railway.app/health`
-   - Should return: `{"status": "healthy"}`
-
-2. **Record Audio**:
-   - Click "Record" tab
-   - Allow microphone access
-   - Click the microphone button to start/stop recording
-   - Emotion analysis happens automatically
-
-3. **Upload Audio**:
-   - Click "Upload" tab
-   - Upload a WAV/MP3/M4A file
-   - Click "Analyze Emotion"
-
-## 🐛 Troubleshooting
-
-### Model Loading Issues
-If the model fails to load:
-- Check Railway logs: `railway logs`
-- Ensure you're on a plan with sufficient memory (>2GB)
-- The model downloads from HuggingFace on first run
-
-### Timeout Errors
-If requests timeout:
-- Increase timeout in `Procfile`: `--timeout 180`
-- Reduce audio length (use first 10 seconds)
-
-### Memory Issues
-If app crashes due to memory:
-- Upgrade to Railway Pro plan
-- Reduce number of workers in `Procfile`: `--workers 1`
-
-### Audio Upload Issues
-- Ensure file is under 16MB
-- Check file format is supported
-- Try converting to WAV format first
-
-## 📊 Expected Emotions
-
-The model recognizes these emotions from IEMOCAP dataset:
-- **neu** - Neutral
-- **hap** - Happy
-- **sad** - Sad
-- **ang** - Angry
-- **exc** - Excited
-
-## 🔒 Security Notes
-
-- No authentication implemented (add if needed for production)
-- Uploaded files are deleted after processing
-- No data is stored permanently
-- HTTPS is provided by Railway by default
-
-## 💰 Cost Estimates
-
-Railway pricing (as of 2024):
-- **Hobby Plan**: $5/month (limited resources, may not be sufficient)
-- **Pro Plan**: Pay-as-you-go (recommended for ML models)
-- Typical cost with Pro: $10-20/month for moderate usage
-
-## 🔄 Updating Your App
-
-To deploy updates:
-
+4. **Deploy Frontend:**
 ```bash
-git add .
-git commit -m "Update description"
-git push
+cd ../frontend
+railway init
+railway up
 ```
 
-Railway automatically redeploys on push to main branch.
+5. **Link services and set environment variables in Railway dashboard**
 
-## 📝 Environment Variables (Optional)
+## Running Locally
 
-You can add these in Railway dashboard if needed:
-- `MAX_CONTENT_LENGTH`: Maximum upload size (default: 16MB)
-- `UPLOAD_FOLDER`: Custom upload directory (default: uploads)
+### Using Docker
 
-## 🆘 Getting Help
+**Backend:**
+```bash
+cd backend
+docker build -t emotion-backend .
+docker run -p 5000:5000 emotion-backend
+```
 
-- Railway Docs: https://docs.railway.app
-- SpeechBrain Docs: https://speechbrain.github.io
-- Check Railway logs: `railway logs`
-- Monitor in Railway dashboard: https://railway.app/dashboard
+**Frontend:**
+```bash
+cd frontend
+docker build -t emotion-frontend .
+docker run -p 80:80 emotion-frontend
+```
 
-## ✅ Success Checklist
+### Without Docker
 
-- [ ] Git repository initialized
-- [ ] All files committed
-- [ ] Railway project created
-- [ ] App deployed successfully
-- [ ] Health endpoint responds
-- [ ] Can record audio via microphone
-- [ ] Can upload audio files
-- [ ] Emotion analysis works
-- [ ] Results display correctly
+**Backend:**
+```bash
+cd backend
+pip install -r requirements.txt
+python app.py
+```
 
----
+**Frontend:**
+```bash
+cd frontend
+npm install
+npm start
+```
 
-**Note**: First deployment takes 5-10 minutes due to model download. Subsequent deployments are faster.
+## Railway Configuration Files
+
+### backend/railway.json
+```json
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile"
+  },
+  "deploy": {
+    "startCommand": "python app.py",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 100,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}
+```
+
+### frontend/railway.json
+```json
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile"
+  },
+  "deploy": {
+    "startCommand": "nginx -g 'daemon off;'",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}
+```
+
+## Environment Variables
+
+### Backend
+- `PORT`: Automatically set by Railway (default: 5000)
+- `FLASK_ENV`: Set to `production`
+
+### Frontend
+- `REACT_APP_API_URL`: Your Railway backend URL (e.g., `https://your-backend.railway.app`)
+
+## API Endpoints
+
+### Backend
+
+**GET /health**
+- Health check endpoint
+- Returns: `{"status": "healthy"}`
+
+**POST /classify**
+- Classifies emotion from audio
+- Body: FormData with `audio` file (WAV format)
+- Returns:
+```json
+{
+  "emotion": "hap",
+  "confidence": 0.85
+}
+```
+
+## Features
+
+- **Audio Recording**: Record directly from browser microphone
+- **Emotion Classification**: Detects 5 emotions (Happy, Sad, Angry, Neutral, Fearful)
+- **Real-time Analysis**: Fast classification using SpeechBrain model
+- **Beautiful UI**: Modern, responsive design with Tailwind CSS
+- **Railway-Optimized**: Configured for easy Railway deployment
+
+## Emotion Labels
+
+- `hap`: Happy
+- `sad`: Sad
+- `ang`: Angry
+- `neu`: Neutral
+- `fea`: Fearful
+
+## Troubleshooting
+
+### Railway Deployment Issues
+
+**Build fails:**
+- Check Railway build logs
+- Ensure Dockerfile paths are correct
+- Verify requirements.txt has all dependencies
+
+**Backend timeout on first request:**
+- The first request downloads the SpeechBrain model (~100MB)
+- Increase Railway timeout if needed
+- Model is cached after first download
+
+**CORS errors:**
+- Verify `REACT_APP_API_URL` in frontend environment variables
+- Ensure it matches your backend Railway URL
+- Check Flask-CORS is installed
+
+**Frontend can't connect to backend:**
+- Verify backend is deployed and running
+- Check `REACT_APP_API_URL` environment variable
+- Ensure backend URL is correct (no trailing slash)
+
+### General Issues
+
+**Microphone not working:**
+- Railway provides HTTPS by default (required for microphone)
+- Check browser permissions
+
+**Audio format issues:**
+- Browser must support MediaRecorder API
+- WAV format is used
+
+## Cost Optimization on Railway
+
+- Railway offers $5 free credit monthly
+- Backend model download happens once, then cached
+- Consider using Railway's sleep mode for development
+
+## Tech Stack
+
+**Backend:**
+- Flask (Python web framework)
+- SpeechBrain (Emotion recognition)
+- PyTorch (ML backend)
+
+**Frontend:**
+- React (UI framework)
+- Tailwind CSS (Styling)
+- MediaRecorder API (Audio recording)
+
+**Deployment:**
+- Railway (Hosting platform)
+- Docker (Containerization)
+- Nginx (Frontend server)
+
+## Next Steps
+
+1. Push code to GitHub
+2. Connect repository to Railway
+3. Configure environment variables
+4. Access your deployed app!
+
+Your app will be available at:
+- Frontend: `https://your-app.railway.app`
+- Backend: `https://your-backend.railway.app`

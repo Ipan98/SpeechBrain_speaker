@@ -1,119 +1,105 @@
-from flask import Flask, render_template, request, jsonify
+import streamlit as st
+import wave
 import os
-import librosa
-import soundfile as sf
+import tempfile
 import torch
-from werkzeug.utils import secure_filename
-from transformers import Wav2Vec2ForSequenceClassification, Wav2Vec2Processor
+import torchaudio
+import numpy as np
+import sounddevice as sd
+from speechbrain.pretrained.interfaces import foreign_class
 
-app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-app.config['ALLOWED_EXTENSIONS'] = {'wav', 'mp3', 'm4a', 'ogg', 'flac'}
+# -------------------------------
+# Streamlit UI setup
+# -------------------------------
+st.set_page_config(page_title="Emotion Detection 🎧", layout="centered")
+st.title("🎙️ Emotion Detection with SpeechBrain (Custom Interface)")
+st.markdown("""
+Upload or record an audio clip — the app will detect your emotion using your custom SpeechBrain model.
 
-# Create uploads folder if it doesn't exist
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+Model: **speechbrain/emotion-recognition-wav2vec2-IEMOCAP**  
+Interface: **custom_interface.py**
+""")
 
-# Load the emotion classifier once at startup
-print("Loading emotion recognition model...")
-model_name = "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
-processor = Wav2Vec2Processor.from_pretrained(model_name)
-model = Wav2Vec2ForSequenceClassification.from_pretrained(model_name)
-print("Model loaded successfully!")
+# -------------------------------
+# Load SpeechBrain custom model
+# -------------------------------
+@st.cache_resource
+def load_classifier():
+    return foreign_class(
+        source="speechbrain/emotion-recognition-wav2vec2-IEMOCAP",
+        pymodule_file="custom_interface.py",
+        classname="CustomEncoderWav2vec2Classifier"
+    )
 
-# Emotion labels
-emotion_labels = ['angry', 'calm', 'disgust', 'fearful', 'happy', 'neutral', 'sad', 'surprised']
+classifier = load_classifier()
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
-def preprocess_audio(input_path):
-    """Load and preprocess audio to 16kHz mono"""
-    try:
-        speech, sr = librosa.load(input_path, sr=16000, mono=True)
-        # Take first 10 seconds if longer
-        max_length = 16000 * 10
-        if len(speech) > max_length:
-            speech = speech[:max_length]
-        return speech
-    except Exception as e:
-        print(f"Error preprocessing audio: {e}")
-        return None
+# -------------------------------
+# Function for emotion recognition
+# -------------------------------
+def emotion_recognition(file_name):
+    with wave.open(file_name, 'rb') as wav_file:
+        frame_rate = wav_file.getframerate()
+        channels = wav_file.getnchannels()
+        sample_width = wav_file.getsampwidth()
+        frame_count = wav_file.getnframes()
+        segment_length = 10 * frame_rate
 
-def predict_emotion(audio_data):
-    """Analyze emotion from audio data"""
-    try:
-        # Prepare input
-        inputs = processor(audio_data, sampling_rate=16000, return_tensors="pt", padding=True)
-        
-        # Get prediction
-        with torch.no_grad():
-            logits = model(**inputs).logits
-        
-        # Get probabilities
-        probs = torch.nn.functional.softmax(logits, dim=-1)
-        predicted_id = torch.argmax(probs, dim=-1).item()
-        confidence = probs[0][predicted_id].item()
-        
-        emotion = emotion_labels[predicted_id]
-        
-        return emotion, confidence
-    except Exception as e:
-        print(f"Error in emotion recognition: {e}")
-        return None, None
+        # Loop through segments of audio
+        for i in range(0, frame_count, segment_length):
+            temp_file_name = 'temp.wav'
+            with wave.open(temp_file_name, 'wb') as new_wav_file:
+                new_wav_file.setframerate(frame_rate)
+                new_wav_file.setnchannels(channels)
+                new_wav_file.setsampwidth(sample_width)
+                segment = wav_file.readframes(segment_length)
+                new_wav_file.writeframes(segment)
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+            out_prob, score, index, text_lab = classifier.classify_file(temp_file_name)
+            return text_lab[0]
 
-@app.route('/analyze', methods=['POST'])
-def analyze():
-    try:
-        if 'audio' not in request.files:
-            return jsonify({'error': 'No audio file provided'}), 400
-        
-        file = request.files['audio']
-        
-        if file.filename == '':
-            return jsonify({'error': 'No file selected'}), 400
-        
-        if not allowed_file(file.filename):
-            return jsonify({'error': 'Invalid file format'}), 400
-        
-        # Save uploaded file
-        filename = secure_filename(file.filename)
-        input_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(input_path)
-        
-        # Preprocess audio
-        audio_data = preprocess_audio(input_path)
-        
-        # Clean up uploaded file
-        if os.path.exists(input_path):
-            os.remove(input_path)
-        
-        if audio_data is None:
-            return jsonify({'error': 'Failed to process audio file'}), 500
-        
-        # Analyze emotion
-        emotion, confidence = predict_emotion(audio_data)
-        
-        if emotion is None:
-            return jsonify({'error': 'Failed to analyze emotion'}), 500
-        
-        return jsonify({
-            'emotion': emotion,
-            'confidence': confidence
-        })
-    
-    except Exception as e:
-        print(f"Error: {e}")
-        return jsonify({'error': str(e)}), 500
 
-@app.route('/health')
-def health():
-    return jsonify({'status': 'healthy'})
+# -------------------------------
+# Upload or record section
+# -------------------------------
+st.subheader("🎧 Upload or Record Audio")
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+col1, col2 = st.columns(2)
+
+# Upload
+with col1:
+    uploaded_file = st.file_uploader("Upload WAV file", type=["wav", "mp3", "ogg"])
+
+# Record
+with col2:
+    duration = st.slider("Record duration (seconds):", 3, 10, 5)
+    if st.button("🎤 Record"):
+        st.info("Recording...")
+        fs = 16000
+        audio = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype='float32')
+        sd.wait()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+            torchaudio.save(tmp.name, torch.tensor(audio.T), fs)
+            uploaded_file = open(tmp.name, "rb")
+        st.success("Recording finished!")
+
+
+# -------------------------------
+# Run emotion detection
+# -------------------------------
+if uploaded_file:
+    # Save uploaded/recorded audio
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmpfile:
+        tmpfile.write(uploaded_file.read())
+        tmp_path = tmpfile.name
+
+    st.audio(tmp_path)
+
+    st.info("Analyzing emotion...")
+    emotion = emotion_recognition(tmp_path)
+    st.success(f"🧠 **Detected Emotion:** {emotion}")
+
+    os.remove(tmp_path)
+
+st.markdown("---")
+st.caption("Built with SpeechBrain + Streamlit | Custom Interface Loader")

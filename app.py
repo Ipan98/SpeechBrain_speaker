@@ -1,10 +1,10 @@
 from flask import Flask, render_template, request, jsonify
 import os
-import wave
 import librosa
 import soundfile as sf
+import torch
 from werkzeug.utils import secure_filename
-from speechbrain.pretrained.interfaces import foreign_class
+from transformers import Wav2Vec2ForSequenceClassification, Wav2Vec2Processor
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -16,53 +16,48 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # Load the emotion classifier once at startup
 print("Loading emotion recognition model...")
-classifier = foreign_class(
-    source="speechbrain/emotion-recognition-wav2vec2-IEMOCAP",
-    pymodule_file="custom_interface.py",
-    classname="CustomEncoderWav2vec2Classifier"
-)
+model_name = "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
+processor = Wav2Vec2Processor.from_pretrained(model_name)
+model = Wav2Vec2ForSequenceClassification.from_pretrained(model_name)
 print("Model loaded successfully!")
+
+# Emotion labels
+emotion_labels = ['angry', 'calm', 'disgust', 'fearful', 'happy', 'neutral', 'sad', 'surprised']
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
-def preprocess_audio(input_path, output_path):
-    """Convert any audio format to 16kHz mono WAV"""
+def preprocess_audio(input_path):
+    """Load and preprocess audio to 16kHz mono"""
     try:
-        y, sr = librosa.load(input_path, sr=16000, mono=True)
-        sf.write(output_path, y, sr)
-        return True
+        speech, sr = librosa.load(input_path, sr=16000, mono=True)
+        # Take first 10 seconds if longer
+        max_length = 16000 * 10
+        if len(speech) > max_length:
+            speech = speech[:max_length]
+        return speech
     except Exception as e:
         print(f"Error preprocessing audio: {e}")
-        return False
+        return None
 
-def emotion_recognition(file_path):
-    """Analyze emotion from audio file"""
+def predict_emotion(audio_data):
+    """Analyze emotion from audio data"""
     try:
-        with wave.open(file_path, 'rb') as wav_file:
-            frame_rate = wav_file.getframerate()
-            channels = wav_file.getnchannels()
-            sample_width = wav_file.getsampwidth()
-            frame_count = wav_file.getnframes()
-            segment_length = 10 * frame_rate
-
-            # Process first 10 seconds
-            temp_file = os.path.join(app.config['UPLOAD_FOLDER'], 'temp_segment.wav')
-            
-            with wave.open(temp_file, 'wb') as new_wav_file:
-                new_wav_file.setframerate(frame_rate)
-                new_wav_file.setnchannels(channels)
-                new_wav_file.setsampwidth(sample_width)
-                segment = wav_file.readframes(min(segment_length, frame_count))
-                new_wav_file.writeframes(segment)
-
-            out_prob, score, index, text_lab = classifier.classify_file(temp_file)
-            
-            # Clean up temp file
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
-            
-            return text_lab[0], float(score[0])
+        # Prepare input
+        inputs = processor(audio_data, sampling_rate=16000, return_tensors="pt", padding=True)
+        
+        # Get prediction
+        with torch.no_grad():
+            logits = model(**inputs).logits
+        
+        # Get probabilities
+        probs = torch.nn.functional.softmax(logits, dim=-1)
+        predicted_id = torch.argmax(probs, dim=-1).item()
+        confidence = probs[0][predicted_id].item()
+        
+        emotion = emotion_labels[predicted_id]
+        
+        return emotion, confidence
     except Exception as e:
         print(f"Error in emotion recognition: {e}")
         return None, None
@@ -90,19 +85,18 @@ def analyze():
         input_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(input_path)
         
-        # Preprocess to 16kHz mono WAV
-        processed_path = os.path.join(app.config['UPLOAD_FOLDER'], 'processed.wav')
-        if not preprocess_audio(input_path, processed_path):
+        # Preprocess audio
+        audio_data = preprocess_audio(input_path)
+        
+        # Clean up uploaded file
+        if os.path.exists(input_path):
+            os.remove(input_path)
+        
+        if audio_data is None:
             return jsonify({'error': 'Failed to process audio file'}), 500
         
         # Analyze emotion
-        emotion, confidence = emotion_recognition(processed_path)
-        
-        # Clean up files
-        if os.path.exists(input_path):
-            os.remove(input_path)
-        if os.path.exists(processed_path):
-            os.remove(processed_path)
+        emotion, confidence = predict_emotion(audio_data)
         
         if emotion is None:
             return jsonify({'error': 'Failed to analyze emotion'}), 500

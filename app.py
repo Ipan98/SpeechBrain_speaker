@@ -1,11 +1,11 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import wave
 import os
 import tempfile
 from speechbrain.pretrained.interfaces import foreign_class
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', static_url_path='')
 CORS(app)
 
 # Initialize the classifier
@@ -47,11 +47,23 @@ def emotion_recognition(file_path):
     except Exception as e:
         raise Exception(f"Error processing audio: {str(e)}")
 
-@app.route('/health', methods=['GET'])
+# Serve the React app
+@app.route('/')
+def serve_index():
+    return send_from_directory(app.static_folder, 'index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    if os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_from_directory(app.static_folder, 'index.html')
+
+@app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({"status": "healthy"}), 200
 
-@app.route('/classify', methods=['POST'])
+@app.route('/api/classify', methods=['POST'])
 def classify_audio():
     if 'audio' not in request.files:
         return jsonify({"error": "No audio file provided"}), 400

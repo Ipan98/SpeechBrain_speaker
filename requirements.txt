@@ -6,3 +6,4 @@ torchaudio==2.1.0
 transformers==4.35.0
 sentencepiece==0.1.99
 huggingface-hub==0.19.4
+gunicorn==21.2.0
